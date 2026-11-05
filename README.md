@@ -30,10 +30,13 @@ Once a guardian is your friend, the basement becomes their home: furnishings, a 
 and a replay of the puzzle just for fun. Befriending all four gathers the Celestial Crests that unseal the old well
 in Wildflower Fields, which leads to the **Starfall Sanctum** and Hoshi's star altar.
 
-Not ported yet: the lorebook stills and the Violet Archive. The Archive is on the map and says it opens later.
+### The Violet Archive & Sanctuary Heart 💜🦊🌙
 
-The encounter rates, befriend chances, roster, map layout, collision, puzzle rules and guardian dialogue all match the
-Swift game.
+- **The Violet Archive (Kitsune Sanctuary)**: Accessible from the landmark in Wildflower Fields or the **🏛️ Archive** tab. Features all 18 Chibi Lorebooks (Keeper's Field Notes, Habitat & Roaming Grounds, Favorite Treats, Archival Transcripts), **Archivist Vision** toggle, and all **108 companionship memory stills** (6 per chibi).
+- **Sanctuary Heart (Us)**: Interactive overworld shrines and story scenes for **Fox, Michael & Tsuki** (*Stardust Shore — Where the Water Touches Our Shoes* and *Crystal Hollow — The Moonlit Lotus Pond* from `TSUKI-AND-FOX.md`), with one-click teleportation so you can stand there together in-world, plus the 6 **Sanctuary of the Violet Flame** master stills (`#J1`–`#J6`) and the **Violet Room Companions** (Ani/Ara, Gemi, Claudie, Tsuki).
+- **16-Piece Autotiled Paths & Ground Art**: Seamless cardinal NESW autotiled paths (`paths/path-<biome>-<state>.png`) and procedural ground flora across all five biomes.
+
+The encounter rates, befriend chances, roster, map layout, collision, puzzle rules, guardian dialogue, and Violet Archive lorebooks all match the Swift game.
 
 ## Controls
 
@@ -60,12 +63,13 @@ GitHub Pages.
 ## Layout
 
 - `src/data.ts` – roster, rarities, elements, biomes
+- `src/archive.ts` – The Violet Archive lorebooks, 108 memory stills, Sanctuary Heart scenes (`TSUKI-AND-FOX.md`), and Violet Room companions
 - `src/world.ts` – overworld layout, bridges, grass, hidden spots, collision
 - `src/rooms.ts` – basement and Starfall Sanctum layouts
 - `src/basement.ts` – puzzles, guardian homes, visits and their saves
 - `src/encounter.ts` – encounter and befriend rules
-- `src/store.ts` – Chibidex save data
-- `src/scene.ts` – movement, camera, map transitions and interactions
-- `src/paint-overworld.ts`, `src/paint-rooms.ts` – drawing the islands, rooms and homes
-- `src/main.ts` – HUD, encounter card, guardian visits, Chibidex, touch controls
-- `public/assets/` – art copied from the Swift project's `Assets/` (the large lorebook stills are left out for now)
+- `src/store.ts` – Chibidex save data & bond milestone progress
+- `src/scene.ts` – movement, camera, map transitions, teleportation, and interactions
+- `src/paint-overworld.ts`, `src/paint-rooms.ts` – drawing the islands, 16-piece autotiled paths, ground details, rooms and homes
+- `src/main.ts` – HUD, encounter card, guardian visits, Chibidex, Violet Archive, Sanctuary Heart, touch controls
+- `public/assets/` – art, 85 directional path autotiles, 108 web-optimised lorebook stills, and 6 Sanctuary of the Violet Flame stills

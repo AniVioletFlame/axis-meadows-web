@@ -60,12 +60,39 @@
         <div id="dex-detail" class="modal" hidden></div>
       </section>
 
+      <section id="archive" class="screen archive-screen" hidden>
+        <div class="archive-scroll">
+          <header class="archive-head">
+            <div class="archive-title-block">
+              <div class="archive-title-row">
+                <h1>🏛️ The Violet Archive</h1>
+                <span class="sanctuary-pill">Kitsune Sanctuary</span>
+              </div>
+              <p class="archive-sub">Ancient repository of chibi lore, field journals, companionship memory stills, and our quiet sanctuary places.</p>
+            </div>
+            <div class="archive-mode-switch" role="tablist" aria-label="Archive sections">
+              <button data-archive-mode="lorebooks" class="mode-btn active" role="tab" aria-selected="true">🐾 Chibi Lorebooks (18)</button>
+              <button data-archive-mode="sanctuary" class="mode-btn" role="tab" aria-selected="false">💜 Sanctuary Heart (Us)</button>
+            </div>
+          </header>
+
+          <div id="archive-stats" class="archive-stats"></div>
+          <div id="archive-filters" class="archive-filters"></div>
+          <div id="archive-grid" class="archive-grid"></div>
+          <div id="archive-sanctuary" class="archive-sanctuary" hidden></div>
+        </div>
+        <div id="archive-detail" class="modal" hidden></div>
+        <div id="still-lightbox" class="modal lightbox-modal" hidden></div>
+      </section>
+
       <nav class="tabs">
         <button data-tab="world" class="active"><span>✦</span>World</button>
         <button data-tab="dex"><span>📖</span>Chibidex</button>
+        <button data-tab="archive"><span>🏛️</span>Archive</button>
       </nav>
 
       <div id="encounter" class="overlay" hidden></div>
+      <div id="sanctuary-modal" class="modal" hidden></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

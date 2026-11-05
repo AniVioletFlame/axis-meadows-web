@@ -158,6 +158,8 @@ const SPOT_DEFS: [string, Biome, number, number, string, Spot['portal']][] = [
   ['shore-tidepool', 'stardustShore', 39, 18, 'Sunken Vault (B1)', 'sunken-vault'],
   ['meadow-old-well', 'wildflowerFields', 4, 11, 'Starfall Sanctum', 'starfall'],
   ['meadow-violet-archive', 'wildflowerFields', 11, 12, 'The Violet Archive', null],
+  ['shore-our-horizon', 'stardustShore', 38, 6, 'Moonlit Shoreline (Fox & Michael)', null],
+  ['crystal-lotus-pond', 'crystalHollow', 58, 16, 'Lotus Crystal Ledge (Tsuki & Us)', null],
 ];
 
 export const SPOTS: Spot[] = SPOT_DEFS.map(([id, biome, c, r, label, portal]) => {

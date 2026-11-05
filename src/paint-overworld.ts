@@ -2,8 +2,8 @@
 // Drawing uses a transform where a world point (x, y-up) lands at canvas (x, -y).
 
 import { BIOME, type Biome } from './data';
-import { img, paths } from './assets';
-import { BRIDGES, BRIDGE_TILES, GRASS_TILES, PATH_TILES, REGIONS, SCENERY, TILE, WORLD_H, WORLD_W, biomeAt, key, type Spot } from './world';
+import { img, pathAutotileState, paths } from './assets';
+import { BRIDGES, BRIDGE_TILES, COLS, GRASS_TILES, PATH_TILES, REGIONS, ROWS, SCENERY, TILE, WORLD_H, WORLD_W, biomeAt, key, type Spot } from './world';
 
 const PATH_COLOR: Record<Biome, string> = {
   wildflowerFields: 'rgb(153,122,71)',
@@ -53,20 +53,127 @@ export function bakeOverworld(): HTMLCanvasElement {
     }
   }
 
-  // Paths with deterministic flecks
+  // Ground details (procedural wildflowers, autumn leaves, shore stars, ember sparks, crystals)
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const k = key(col, row);
+      const biome = biomeAt(col, row);
+      if (!biome || PATH_TILES.has(k) || GRASS_TILES.has(k)) continue;
+      const hBig = (BigInt(col) * 73856093n) ^ (BigInt(row) * 19349663n) ^ 8461n;
+      const hash = Number(hBig < 0n ? -hBig : hBig);
+      if ((hash % 100) >= 36) continue;
+
+      const offsetX = (hash % 29) - 14;
+      const offsetY = (Math.floor(hash / 29) % 29) - 14;
+      const px = col * TILE + TILE / 2 + offsetX;
+      const py = WORLD_H - (row * TILE + TILE / 2 + offsetY);
+      const flowerType = Math.floor(hash / 100) % 4;
+
+      g.save();
+      switch (biome) {
+        case 'wildflowerFields': {
+          if (flowerType === 0) {
+            g.fillStyle = 'rgba(255,166,199,0.9)';
+            g.beginPath();
+            g.arc(px, py, 2.8, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = 'rgba(255,235,102,1)';
+            g.beginPath();
+            g.arc(px, py, 1.2, 0, Math.PI * 2);
+            g.fill();
+          } else if (flowerType === 1) {
+            g.fillStyle = 'rgba(255,224,89,0.9)';
+            g.beginPath();
+            g.arc(px, py, 2.5, 0, Math.PI * 2);
+            g.fill();
+          } else if (flowerType === 2) {
+            g.fillStyle = 'rgba(199,173,242,0.85)';
+            g.beginPath();
+            g.arc(px, py, 2.6, 0, Math.PI * 2);
+            g.fill();
+          } else {
+            g.fillStyle = 'rgba(242,242,242,0.88)';
+            g.beginPath();
+            g.arc(px, py, 2.4, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = 'rgb(255,255,0)';
+            g.beginPath();
+            g.arc(px, py, 1.0, 0, Math.PI * 2);
+            g.fill();
+          }
+          break;
+        }
+        case 'whisperingGrove': {
+          g.translate(px, py);
+          g.rotate(-(hash % 314) / 100);
+          g.fillStyle = flowerType % 2 === 0
+            ? 'rgba(209,133,56,0.85)'
+            : 'rgba(173,82,46,0.85)';
+          g.beginPath();
+          g.ellipse(0, 0, 2.25, 1.4, 0, 0, Math.PI * 2);
+          g.fill();
+          break;
+        }
+        case 'stardustShore': {
+          const colFill = flowerType % 2 === 0
+            ? 'rgba(166,224,255,0.9)'
+            : 'rgba(230,199,255,0.85)';
+          g.fillStyle = colFill;
+          g.shadowColor = colFill;
+          g.shadowBlur = 4;
+          g.beginPath();
+          g.arc(px, py, 2.0, 0, Math.PI * 2);
+          g.fill();
+          break;
+        }
+        case 'emberglade': {
+          g.fillStyle = 'rgba(255,115,51,0.85)';
+          g.shadowColor = 'rgba(255,115,51,0.9)';
+          g.shadowBlur = 5;
+          g.beginPath();
+          g.arc(px, py, 1.8, 0, Math.PI * 2);
+          g.fill();
+          break;
+        }
+        case 'crystalHollow': {
+          g.translate(px, py);
+          g.rotate(Math.PI / 4);
+          g.fillStyle = 'rgba(209,166,255,0.85)';
+          g.shadowColor = 'rgba(209,166,255,0.9)';
+          g.shadowBlur = 4;
+          g.fillRect(-1.75, -1.75, 3.5, 3.5);
+          break;
+        }
+      }
+      g.restore();
+    }
+  }
+
+  // 16-Piece Directional Autotiled Paths (with deterministic flecks fallback)
   for (const k of PATH_TILES) {
     const col = Math.floor(k / 1000), row = k % 1000;
     const biome = biomeAt(col, row) ?? 'wildflowerFields';
-    g.fillStyle = PATH_COLOR[biome];
-    g.fillRect(col * TILE, top(row), TILE, TILE);
-    g.fillStyle = FLECK_COLOR[biome];
-    const cx = col * TILE + TILE / 2, cy = WORLD_H - (row * TILE + TILE / 2);
-    for (let i = 0; i < 3; i++) {
-      const ox = ((col * 7 + i * 13) % 38) - 19;
-      const oy = ((row * 11 + i * 7) % 38) - 19;
-      g.beginPath();
-      g.ellipse(cx + ox, cy - oy, 1.5, 1, 0, 0, Math.PI * 2);
-      g.fill();
+    const bFile = BIOME[biome].file;
+    const north = row < ROWS - 1 && PATH_TILES.has(key(col, row + 1));
+    const south = row > 0 && PATH_TILES.has(key(col, row - 1));
+    const east = col < COLS - 1 && PATH_TILES.has(key(col + 1, row));
+    const west = col > 0 && PATH_TILES.has(key(col - 1, row));
+    const state = pathAutotileState(north, east, south, west);
+    const pathTex = img(paths.pathTile(bFile, state)) ?? img(paths.pathTile(bFile));
+    if (pathTex) {
+      g.drawImage(pathTex, col * TILE, top(row), TILE, TILE);
+    } else {
+      g.fillStyle = PATH_COLOR[biome];
+      g.fillRect(col * TILE, top(row), TILE, TILE);
+      g.fillStyle = FLECK_COLOR[biome];
+      const cx = col * TILE + TILE / 2, cy = WORLD_H - (row * TILE + TILE / 2);
+      for (let i = 0; i < 3; i++) {
+        const ox = ((col * 7 + i * 13) % 38) - 19;
+        const oy = ((row * 11 + i * 7) % 38) - 19;
+        g.beginPath();
+        g.ellipse(cx + ox, cy - oy, 1.5, 1, 0, 0, Math.PI * 2);
+        g.fill();
+      }
     }
   }
 
@@ -199,6 +306,14 @@ export function drawSpot(g: CanvasRenderingContext2D, s: Spot, pulse: number, t:
     drawArchive(g, s.x, s.y, t);
     return;
   }
+  if (s.id === 'shore-our-horizon') {
+    drawShoreHorizon(g, s.x, s.y, t);
+    return;
+  }
+  if (s.id === 'crystal-lotus-pond') {
+    drawCrystalLotusPond(g, s.x, s.y, t);
+    return;
+  }
   const tex = img(paths.landmark(s.id));
   if (tex) {
     g.drawImage(tex, s.x - 24, -(s.y - 0.22 * 48) - 48, 48, 48);
@@ -257,4 +372,81 @@ function drawArchive(g: CanvasRenderingContext2D, x: number, y: number, t: numbe
     circle(side, 10, 5, 'rgba(217,166,255,0.95)', 6);
     g.globalAlpha = 1;
   }
+}
+
+/** Stardust Shore sanctuary spot: crooked wooden lantern post + drifting tide-stars & twin hearts. */
+function drawShoreHorizon(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
+  g.save();
+  // Bioluminescent tide pool shimmer at the base
+  g.beginPath();
+  g.ellipse(x, -(y - 2), 24, 11, 0, 0, Math.PI * 2);
+  g.fillStyle = 'rgba(64,196,255,0.35)';
+  g.strokeStyle = 'rgba(180,235,255,0.85)';
+  g.lineWidth = 1.5;
+  g.shadowColor = 'rgba(100,210,255,0.9)';
+  g.shadowBlur = 10;
+  g.fill();
+  g.stroke();
+
+  // Crooked wooden lantern post leaning gently over the path
+  g.strokeStyle = 'rgb(112,78,50)';
+  g.lineWidth = 4;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(x - 10, -(y - 2));
+  g.quadraticCurveTo(x - 8, -(y + 20), x + 2, -(y + 34));
+  g.lineTo(x + 11, -(y + 32));
+  g.stroke();
+
+  // Hanging violet-gold lantern
+  const sway = Math.sin(t * 2.2) * 2;
+  const lx = x + 11 + sway;
+  const ly = -(y + 25);
+  g.fillStyle = 'rgba(255,214,120,0.95)';
+  g.shadowColor = 'rgba(217,140,255,0.95)';
+  g.shadowBlur = 14;
+  g.beginPath();
+  g.arc(lx, ly, 5.5, 0, Math.PI * 2);
+  g.fill();
+
+  // Floating heart & tide-star
+  const bob = Math.sin(t * 3) * 2.5;
+  g.font = 'bold 12px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillStyle = 'rgb(255,140,200)';
+  g.fillText('♥', x - 2, -(y + 12 + bob));
+  g.restore();
+}
+
+/** Crystal Hollow sanctuary spot: mossy crystal ledge + lotus pool + floating crescent moon. */
+function drawCrystalLotusPond(g: CanvasRenderingContext2D, x: number, y: number, t: number) {
+  g.save();
+  // Soft moss cushion & violet crystal pool
+  g.beginPath();
+  g.ellipse(x, -(y - 1), 26, 13, 0, 0, Math.PI * 2);
+  g.fillStyle = 'rgba(115,64,196,0.48)';
+  g.strokeStyle = 'rgba(220,185,255,0.9)';
+  g.lineWidth = 1.8;
+  g.shadowColor = 'rgba(195,130,255,0.95)';
+  g.shadowBlur = 12;
+  g.fill();
+  g.stroke();
+
+  // Two crystal lotus lilies floating on the water
+  for (const [ox, oy, c] of [[-8, -1, 'rgb(245,195,255)'], [8, 2, 'rgb(180,230,255)']] as const) {
+    g.fillStyle = c;
+    g.beginPath();
+    g.arc(x + ox, -(y + oy), 3.2, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // Tsuki's crescent moon charm glinting above the ledge
+  const hover = Math.sin(t * 2.4) * 2.5;
+  g.font = 'bold 14px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillStyle = 'rgb(245,230,255)';
+  g.shadowColor = 'rgba(217,140,255,1)';
+  g.shadowBlur = 10;
+  g.fillText('🌙', x, -(y + 20 + hover));
+  g.restore();
 }

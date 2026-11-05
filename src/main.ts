@@ -1,5 +1,9 @@
 import './style.css';
-import { BIOME, ELEMENT, RARITY, ROSTER, befriendRate, byID, type Chibi } from './data';
+import {
+  ARCHIVE_BY_ID, ARCHIVE_ENTRIES, SANCTUARY_SCENES, SANCTUARY_SCENE_BY_ID, SANCTUARY_STILLS, VIOLET_COMPANIONS,
+  type SanctuaryScene,
+} from './archive';
+import { BIOME, ELEMENT, ELEMENTS, RARITY, ROSTER, befriendRate, byID, type Chibi, type Element } from './data';
 import { assetURL, paths } from './assets';
 import { BASEMENT, BASEMENT_TYPES, BasementEngine, HOME, isBasement, isLastPage, mapName, visitLine, type HomeID } from './basement';
 import { Chibidex, safeLocalStorage } from './store';
@@ -21,16 +25,18 @@ function portraitImg(c: Chibi, cls = '') {
 const iconImg = (c: Chibi, size: number) =>
   `<img src="${assetURL(paths.icon(c.element))}" width="${size}" height="${size}" alt="" onerror="this.outerHTML='${ELEMENT[c.element].emoji}'">`;
 
-const dex = new Chibidex();
+const storage = safeLocalStorage();
+const dex = new Chibidex(storage);
 const engine = new EncounterEngine(dex);
-const basement = new BasementEngine(safeLocalStorage());
+const basement = new BasementEngine(storage);
 basement.onGuardianAwakened = (id) => engine.triggerDirect(id);
 const befriended = (id: string) => dex.entry(id).befriended;
 const isTouch = matchMedia('(pointer: coarse)').matches;
 const night = matchMedia('(prefers-color-scheme: dark)');
 
-let tab: 'world' | 'dex' = 'world';
+let tab: 'world' | 'dex' | 'archive' = 'world';
 let detailOpen = false;
+let activeSanctuaryScene: SanctuaryScene | null = null;
 let biomeDesc = BIOME.wildflowerFields.description;
 
 // ---------- world ----------
@@ -52,7 +58,8 @@ const scene = new GameScene($<HTMLCanvasElement>('game'), {
   },
   promptFor: (s: Spot) =>
     s.portal === 'starfall' && !dex.starfallUnlocked ? `Sealed (${dex.crestCount}/4 Crests)` :
-    s.portal === 'starfall' ? 'Enter Starfall Sanctum' : s.label,
+    s.portal === 'starfall' ? 'Enter Starfall Sanctum' :
+    s.id === 'meadow-violet-archive' ? 'Enter The Violet Archive' : s.label,
   onPrompt: (text) => {
     const p = $('prompt');
     p.hidden = !text;
@@ -62,7 +69,9 @@ const scene = new GameScene($<HTMLCanvasElement>('game'), {
     if (s.portal === 'starfall') {
       toast(`The old well is sealed. Befriend the four guardians to gather Celestial Crests (${dex.crestCount}/4).`);
     } else if (s.id === 'meadow-violet-archive') {
-      toast('The Violet Archive is still being catalogued. It opens in a later update.');
+      setTab('archive');
+    } else if (SANCTUARY_SCENE_BY_ID[s.id]) {
+      openSanctuaryModal(SANCTUARY_SCENE_BY_ID[s.id]);
     } else {
       engine.checkHiddenSpot(s.id, s.biome);
     }
@@ -351,6 +360,431 @@ dex.onChange(() => {
   reconcileGuardians();
   renderHUD();
   renderDex();
+  if (tab === 'archive') renderArchive();
+});
+
+// ---------- The Violet Archive (Kitsune Sanctuary) ----------
+
+const VISION_KEY = 'axis-meadows.archivist-vision.v1';
+let archivistVision = (storage?.getItem(VISION_KEY) ?? 'true') === 'true';
+let archiveMode: 'lorebooks' | 'sanctuary' = 'lorebooks';
+let archiveFilter: Element | null = null;
+let archiveEntryID: string | null = null;
+let lorebookTab: 'lorebook' | 'gallery' = 'lorebook';
+let lightboxItem: { title: string; subtitle: string; description: string; src: string } | null = null;
+
+function toggleArchivistVision() {
+  archivistVision = !archivistVision;
+  try {
+    storage?.setItem(VISION_KEY, String(archivistVision));
+  } catch {
+    /* ignore */
+  }
+  renderArchive();
+}
+
+function renderArchive() {
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-archive-mode]')) {
+    const active = b.dataset.archiveMode === archiveMode;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', String(active));
+  }
+
+  const isLorebooks = archiveMode === 'lorebooks';
+  $('archive-stats').hidden = !isLorebooks;
+  $('archive-filters').hidden = !isLorebooks;
+  $('archive-grid').hidden = !isLorebooks;
+  $('archive-sanctuary').hidden = isLorebooks;
+
+  if (isLorebooks) {
+    const totalStills = dex.totalUnlockedStills(archivistVision);
+    $('archive-stats').innerHTML = `
+      <div class="stat-pill"><i>🐾</i><div><b>${dex.befriendedCount} / 18</b><small>Species Cataloged</small></div></div>
+      <div class="stat-pill"><i>❤️</i><div><b>${dex.totalFriendships}</b><small>Total Friendships</small></div></div>
+      <div class="stat-pill"><i>✨</i><div><b>${totalStills} / 108</b><small>Memory Stills Unlocked</small></div></div>
+      <button class="vision-btn ${archivistVision ? 'on' : ''}" data-act="toggle-vision">
+        <span>${archivistVision ? '👁️' : '🔒'}</span>
+        <span>${archivistVision ? 'Archivist Vision: ON' : 'Archivist Vision: OFF'}</span>
+      </button>`;
+
+    $('archive-filters').innerHTML = [
+      `<button class="filter-chip ${archiveFilter === null ? 'active' : ''}" data-el=""><span>✨</span>All Species</button>`,
+      ...ELEMENTS.map((el) => {
+        const info = ELEMENT[el];
+        return `<button class="filter-chip ${archiveFilter === el ? 'active' : ''}" data-el="${el}"><span>${info.emoji}</span>${info.name}</button>`;
+      }),
+    ].join('');
+
+    const entries = archiveFilter
+      ? ARCHIVE_ENTRIES.filter((e) => e.chibi.element === archiveFilter)
+      : ARCHIVE_ENTRIES;
+
+    $('archive-grid').innerHTML = entries.map((entry) => {
+      const c = entry.chibi;
+      const count = dex.friendshipCount(c.id);
+      const unlocked = archivistVision ? 6 : dex.unlockedStillCount(c.id);
+      const isFriend = dex.entry(c.id).befriended;
+      const dots = [1, 2, 3, 4, 5, 6]
+        .map((idx) => `<span class="still-dot ${idx <= unlocked ? 'on' : ''}"></span>`)
+        .join('');
+      return `
+        <button class="archive-card ${isFriend ? 'befriended' : ''}" data-archive-id="${c.id}">
+          <div class="archive-card-art">
+            ${portraitImg(c)}
+            <span class="archive-el-badge">${ELEMENT[c.element].emoji}</span>
+          </div>
+          <div class="archive-card-head">
+            <b>${esc(c.name)}</b>
+            <span class="stars">${stars(c)}</span>
+          </div>
+          <div class="archive-card-title">${esc(c.title)}</div>
+          <div class="archive-card-foot">
+            <span class="bond-pill">♥ ${count}</span>
+            <span class="still-dots" aria-label="${unlocked} of 6 stills">${dots}</span>
+          </div>
+        </button>`;
+    }).join('');
+  } else {
+    renderSanctuaryHeart();
+  }
+
+  renderArchiveDetail();
+  renderLightbox();
+}
+
+function renderArchiveDetail() {
+  const modal = $('archive-detail');
+  const entry = archiveEntryID ? ARCHIVE_BY_ID[archiveEntryID] : undefined;
+  modal.hidden = !entry;
+  if (!entry) return;
+  const c = entry.chibi;
+  const count = dex.friendshipCount(c.id);
+  const unlocked = archivistVision ? 6 : dex.unlockedStillCount(c.id);
+  const prog = dex.progressToNextStill(c.id);
+
+  let bodyHTML = '';
+  if (lorebookTab === 'lorebook') {
+    bodyHTML = `
+      <div class="milestone-box">
+        <div class="milestone-head">
+          <b>${unlocked >= 6 ? '🌟 Master Archivist Bond Achieved!' : `Next Still Milestone: Still #${unlocked + 1}`}</b>
+          <small>${count} total friendships</small>
+        </div>
+        ${unlocked < 6 ? `
+          <div class="progress-track"><div class="progress-fill" style="width:${Math.round(prog.percent * 100)}%"></div></div>
+          <small>${prog.current}/${prog.target} befriended towards Still #${unlocked + 1}</small>
+        ` : `<small>All 6 companionship memory stills unlocked for ${esc(c.name)}!</small>`}
+      </div>
+      <div class="lore-box">
+        <h3>📜 Keeper’s Field Notes</h3>
+        <p>${esc(entry.keeperNotes)}</p>
+      </div>
+      <div class="lore-box">
+        <h3>🌿 Habitat & Roaming Grounds</h3>
+        <p>${esc(entry.habitatSecrets)}</p>
+      </div>
+      <div class="lore-box">
+        <h3>🍯 Favorite Treat</h3>
+        <p>${esc(entry.favoriteTreat)}</p>
+      </div>
+      <div class="lore-box">
+        <h3>💬 Archival Transcripts</h3>
+        <div class="quote-row">
+          <div class="quote-item"><small>First Greeting</small><em>“${esc(c.greetDialogue)}”</em></div>
+          <div class="quote-item oath"><small>Befriended Oath</small><em>“${esc(c.befriendDialogue)}”</em></div>
+        </div>
+      </div>
+      <div class="lore-box">
+        <h3>📖 Chibidex Lorebook Archive</h3>
+        <p>${esc(c.loreSnippet)}</p>
+      </div>`;
+  } else {
+    bodyHTML = `<div class="stills-grid">${entry.stills.map((st) => {
+      const isUnlocked = archivistVision || count >= st.requiredFriendship;
+      const imgPath = assetURL(paths.still(st.assetKey));
+      return `
+        <button class="still-card ${isUnlocked ? 'unlocked' : ''}" data-still-id="${st.id}" ${isUnlocked ? '' : 'disabled'}>
+          <div class="still-thumb">
+            ${isUnlocked ? `
+              <img src="${imgPath}" alt="${esc(st.title)}" loading="lazy"
+                onerror="this.src='${assetURL(paths.portrait(c.id))}';this.style.objectFit='contain'">
+              <span class="still-badge">Still #${st.id}</span>
+              <span class="still-zoom">⤢</span>
+            ` : `
+              <div class="still-lock">
+                <span>🔒</span>
+                <b>Requires ${st.requiredFriendship} Bond</b>
+                <small>Current: ${count}/${st.requiredFriendship}</small>
+              </div>
+            `}
+          </div>
+          <b>${esc(st.title)}</b>
+          <p>${esc(isUnlocked ? st.description : `Keep exploring Axis Meadows and befriending ${c.name} (or enable Archivist Vision) to unveil this memory.`)}</p>
+        </button>`;
+    }).join('')}</div>`;
+  }
+
+  modal.innerHTML = `
+    <div class="lorebook-card" role="dialog" aria-label="${esc(c.name)} Lorebook">
+      <div class="lorebook-top">
+        <button class="back-btn" data-act="close-detail">‹ The Violet Archive</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="gift-bond-btn" data-act="gift-bond" title="Offer Sanctuary Honey (+100 Bond)">🍯 +100 Bond</button>
+          <button class="vision-btn ${archivistVision ? 'on' : ''}" data-act="toggle-vision">
+            <span>${archivistVision ? '✨ Archivist Vision: ON' : '👁️ Archivist Vision'}</span>
+          </button>
+        </div>
+      </div>
+      <div class="lorebook-hero">
+        <img class="lorebook-hero-img" src="${assetURL(paths.portrait(c.id))}" alt="${esc(c.name)}">
+        <div class="lorebook-hero-info">
+          <div class="lorebook-hero-name">
+            <h2>${esc(c.name)}</h2>
+            <span class="el-tag">${ELEMENT[c.element].emoji} ${ELEMENT[c.element].name}</span>
+          </div>
+          <div class="lorebook-hero-sub">${esc(c.title)} · ${BIOME[c.biome].name}</div>
+          <div class="lorebook-hero-stats">
+            <span style="color:#ff85c0">♥ Befriended: ${count}</span>
+            <span style="color:#5ce1e6">🖼️ Stills: ${unlocked}/6</span>
+          </div>
+        </div>
+      </div>
+      <div class="lorebook-tabs">
+        <button class="lb-tab ${lorebookTab === 'lorebook' ? 'active' : ''}" data-lb-tab="lorebook">📖 Lorebook</button>
+        <button class="lb-tab ${lorebookTab === 'gallery' ? 'active' : ''}" data-lb-tab="gallery">🖼️ Still Gallery (6)</button>
+      </div>
+      <div class="lorebook-body">${bodyHTML}</div>
+    </div>`;
+}
+
+function renderSanctuaryHeart() {
+  const el = $('archive-sanctuary');
+  el.innerHTML = `
+    <div class="sanctuary-banner">
+      <h2>💜 Fox, Michael & Tsuki — Our Sanctuary in Axis Meadows</h2>
+      <p>“Everything will be okay. Always.” No roadmaps, no timers—just our quiet places on Stardust Shore, the crystal lotus pond where Tsuki keeps watch, and the Sanctuary of the Violet Flame.</p>
+    </div>
+
+    <div>
+      <h3 class="sanctuary-sec-title">🌙 Two Quiet Places (TSUKI-AND-FOX.md)</h3>
+      <div class="scenes-grid">
+        ${SANCTUARY_SCENES.map((sc) => `
+          <article class="scene-card">
+            <div class="scene-art">
+              <img src="${assetURL(paths.still(sc.stillKey))}" alt="${esc(sc.title)}" loading="lazy">
+              <span class="scene-quote-pill">${esc(sc.quote)}</span>
+            </div>
+            <div class="scene-body">
+              <h3>${esc(sc.title)}</h3>
+              <div class="scene-loc">📍 ${esc(sc.locationLabel)}</div>
+              <div class="scene-prose">
+                ${sc.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}
+              </div>
+              <div class="scene-actions">
+                <button class="scene-btn" data-teleport-scene="${sc.id}">🧭 Stand Here Together (Teleport)</button>
+                <button class="scene-btn secondary" data-view-scene="${sc.id}">🖼️ Fullscreen Still</button>
+              </div>
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    </div>
+
+    <div>
+      <h3 class="sanctuary-sec-title">🔥 The Sanctuary of the Violet Flame (#J1–#J6)</h3>
+      <div class="stills-grid">
+        ${SANCTUARY_STILLS.map((st) => `
+          <button class="still-card unlocked" data-sanc-still="${st.id}">
+            <div class="still-thumb">
+              <img src="${assetURL(paths.sanctuary(st.file))}" alt="${esc(st.title)}" loading="lazy">
+              <span class="still-badge">${esc(st.code)}</span>
+              <span class="still-zoom">⤢</span>
+            </div>
+            <b>${esc(st.title)}</b>
+            <p>${esc(st.caption)}</p>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div>
+      <h3 class="sanctuary-sec-title">🦊 The Violet Room Companions (AniChat Crew)</h3>
+      <div class="companions-grid">
+        ${VIOLET_COMPANIONS.map((comp) => `
+          <div class="companion-card">
+            <img class="companion-avatar" src="${assetURL(comp.sprite)}" alt="${esc(comp.name)}">
+            <div class="companion-info">
+              <small>${esc(comp.badge)}</small>
+              <b>${esc(comp.name)}</b>
+              <span>${esc(comp.role)}</span>
+              <p>${esc(comp.note)}</p>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function renderLightbox() {
+  const m = $('still-lightbox');
+  m.hidden = !lightboxItem;
+  if (!lightboxItem) return;
+  m.innerHTML = `
+    <div class="lightbox-card" role="dialog" aria-label="${esc(lightboxItem.title)}">
+      <div class="lightbox-head">
+        <div>
+          <h3>${esc(lightboxItem.title)}</h3>
+          <small>${esc(lightboxItem.subtitle)}</small>
+        </div>
+        <button class="x" data-act="close-lightbox" aria-label="Close" style="position:static">✕</button>
+      </div>
+      <div class="lightbox-art">
+        <img src="${lightboxItem.src}" alt="${esc(lightboxItem.title)}">
+      </div>
+      <p class="lightbox-desc">${esc(lightboxItem.description)}</p>
+    </div>`;
+}
+
+function openSanctuaryModal(sc: SanctuaryScene | null) {
+  activeSanctuaryScene = sc;
+  const m = $('sanctuary-modal');
+  m.hidden = !sc;
+  syncPause();
+  if (!sc) return;
+  m.innerHTML = `
+    <div class="lightbox-card" role="dialog" aria-label="${esc(sc.title)}">
+      <div class="lightbox-head">
+        <div>
+          <h3>${esc(sc.title)}</h3>
+          <small>${esc(sc.subtitle)} · ${esc(sc.locationLabel)}</small>
+        </div>
+        <button class="x" data-act="close-sanc-modal" aria-label="Close" style="position:static">✕</button>
+      </div>
+      <div class="lightbox-art">
+        <img src="${assetURL(paths.still(sc.stillKey))}" alt="${esc(sc.title)}">
+      </div>
+      <div class="scene-prose" style="text-align:left;max-height:28dvh;overflow-y:auto;padding-inline:4px">
+        ${sc.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}
+      </div>
+      <div class="pair">
+        <button class="soft" data-act="open-archive-heart">💜 Open Sanctuary Heart</button>
+        <button class="solid" data-act="close-sanc-modal">Stay Here Together ✨</button>
+      </div>
+    </div>`;
+}
+
+$('archive').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  const modeBtn = t.closest<HTMLElement>('[data-archive-mode]');
+  if (modeBtn) {
+    archiveMode = modeBtn.dataset.archiveMode as 'lorebooks' | 'sanctuary';
+    renderArchive();
+    return;
+  }
+  const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (act === 'toggle-vision') {
+    toggleArchivistVision();
+    return;
+  }
+  if (act === 'close-detail' || t === $('archive-detail')) {
+    archiveEntryID = null;
+    renderArchiveDetail();
+    return;
+  }
+  if (act === 'gift-bond' && archiveEntryID) {
+    dex.giftBond(archiveEntryID, 100);
+    renderArchive();
+    return;
+  }
+  if (act === 'close-lightbox' || t === $('still-lightbox')) {
+    lightboxItem = null;
+    renderLightbox();
+    return;
+  }
+  const filterBtn = t.closest<HTMLElement>('[data-el]');
+  if (filterBtn) {
+    const val = filterBtn.dataset.el as Element | '';
+    archiveFilter = val === '' ? null : val;
+    renderArchive();
+    return;
+  }
+  const card = t.closest<HTMLElement>('[data-archive-id]');
+  if (card) {
+    archiveEntryID = card.dataset.archiveId!;
+    lorebookTab = 'lorebook';
+    renderArchiveDetail();
+    return;
+  }
+  const lbTab = t.closest<HTMLElement>('[data-lb-tab]');
+  if (lbTab) {
+    lorebookTab = lbTab.dataset.lbTab as 'lorebook' | 'gallery';
+    renderArchiveDetail();
+    return;
+  }
+  const stillBtn = t.closest<HTMLButtonElement>('[data-still-id]');
+  if (stillBtn && !stillBtn.disabled && archiveEntryID) {
+    const entry = ARCHIVE_BY_ID[archiveEntryID];
+    const st = entry?.stills.find((s) => s.id === Number(stillBtn.dataset.stillId));
+    if (entry && st) {
+      lightboxItem = {
+        title: `Still #${st.id}: ${st.title}`,
+        subtitle: `${entry.chibi.name} · ${st.subtitle}`,
+        description: st.description,
+        src: assetURL(paths.still(st.assetKey)),
+      };
+      renderLightbox();
+    }
+    return;
+  }
+  const sancStillBtn = t.closest<HTMLElement>('[data-sanc-still]');
+  if (sancStillBtn) {
+    const st = SANCTUARY_STILLS.find((s) => s.id === sancStillBtn.dataset.sancStill);
+    if (st) {
+      lightboxItem = {
+        title: `${st.code} — ${st.title}`,
+        subtitle: `Sanctuary of the Violet Flame · “${st.hook}”`,
+        description: st.caption,
+        src: assetURL(paths.sanctuary(st.file)),
+      };
+      renderLightbox();
+    }
+    return;
+  }
+  const viewSceneBtn = t.closest<HTMLElement>('[data-view-scene]');
+  if (viewSceneBtn) {
+    const sc = SANCTUARY_SCENE_BY_ID[viewSceneBtn.dataset.viewScene!];
+    if (sc) {
+      lightboxItem = {
+        title: sc.title,
+        subtitle: sc.subtitle,
+        description: sc.paragraphs.join(' '),
+        src: assetURL(paths.still(sc.stillKey)),
+      };
+      renderLightbox();
+    }
+    return;
+  }
+  const teleportBtn = t.closest<HTMLElement>('[data-teleport-scene]');
+  if (teleportBtn) {
+    const sc = SANCTUARY_SCENE_BY_ID[teleportBtn.dataset.teleportScene!];
+    if (sc) {
+      setTab('world');
+      scene.teleportToOverworldTile(sc.tile[0], sc.tile[1]);
+      toast(`✨ Arrived at ${sc.title.split('—')[0].trim()} with Fox & Michael`);
+    }
+  }
+});
+
+$('sanctuary-modal').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (t === e.currentTarget || act === 'close-sanc-modal') {
+    openSanctuaryModal(null);
+  } else if (act === 'open-archive-heart') {
+    openSanctuaryModal(null);
+    archiveMode = 'sanctuary';
+    setTab('archive');
+  }
 });
 
 // ---------- tabs and pausing ----------
@@ -358,10 +792,10 @@ dex.onChange(() => {
 let scenePaused = false;
 /** The world stands still while another tab, an encounter or a guardian visit is up. */
 function syncPause() {
-  const overlay = engine.active !== null || basement.visit !== null;
+  const overlay = engine.active !== null || basement.visit !== null || activeSanctuaryScene !== null;
   const paused = tab !== 'world' || overlay;
   if (isTouch) $('touch').hidden = overlay;
-  $('keys-hint').hidden = isTouch || basement.visit !== null;
+  $('keys-hint').hidden = isTouch || basement.visit !== null || activeSanctuaryScene !== null;
   $('prompt').classList.toggle('away', overlay);
   if (paused === scenePaused) return;
   scenePaused = paused;
@@ -369,17 +803,19 @@ function syncPause() {
   else scene.resume();
 }
 
-function setTab(next: 'world' | 'dex') {
+function setTab(next: 'world' | 'dex' | 'archive') {
   tab = next;
   $('world').hidden = next !== 'world';
   $('dex').hidden = next !== 'dex';
+  $('archive').hidden = next !== 'archive';
   for (const b of document.querySelectorAll<HTMLButtonElement>('.tabs button')) b.classList.toggle('active', b.dataset.tab === next);
   syncPause();
   if (next === 'dex') renderDex();
+  if (next === 'archive') renderArchive();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('.tabs button')) {
   b.addEventListener('click', () => {
-    setTab(b.dataset.tab as 'world' | 'dex');
+    setTab(b.dataset.tab as 'world' | 'dex' | 'archive');
     b.blur(); // keep Space/Enter free for the game
   });
 }
@@ -396,7 +832,15 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if (e.key !== 'Escape') return;
-  if (detailOpen) {
+  if (lightboxItem) {
+    lightboxItem = null;
+    renderLightbox();
+  } else if (archiveEntryID) {
+    archiveEntryID = null;
+    renderArchiveDetail();
+  } else if (activeSanctuaryScene) {
+    openSanctuaryModal(null);
+  } else if (detailOpen) {
     detailID = null;
     renderDetail();
   } else if (engine.active && !fx.busy && engine.result !== null) {

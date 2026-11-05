@@ -2,7 +2,7 @@
 // World space is y-up (SpriteKit). Drawing uses a transform where a world point (x, y) lands at canvas (x, -y).
 
 import { BIOME, BIOMES, ELEMENT, byID, type Biome } from './data';
-import { img, loadAll, paths } from './assets';
+import { ALL_PATH_STATES, img, loadAll, paths } from './assets';
 import {
   BASEMENT, BASEMENT_TYPES, HOMES, SUPREME_CELESTIAL, homeGuardian, isBasement, type ActiveMap, type BasementEngine, type HomeID,
 } from './basement';
@@ -96,10 +96,15 @@ export class GameScene {
 
   async init() {
     const list: string[] = ['grounds/ground-stardust-ocean.png'];
-    for (const b of BIOMES) list.push(paths.ground(BIOME[b].file), paths.grass(BIOME[b].file));
+    for (const b of BIOMES) {
+      const f = BIOME[b].file;
+      list.push(paths.ground(f), paths.grass(f), paths.pathTile(f));
+      for (const st of ALL_PATH_STATES) list.push(paths.pathTile(f, st));
+    }
     for (const s of SCENERY) list.push(paths.scenery(s.prop));
-    // The Violet Archive is drawn from shapes and has no landmark image.
-    for (const s of SPOTS) if (s.id !== 'meadow-violet-archive') list.push(paths.landmark(s.id));
+    // The Violet Archive and Sanctuary spots are drawn from shapes and have no landmark image.
+    const proceduralSpots = new Set(['meadow-violet-archive', 'shore-our-horizon', 'crystal-lotus-pond']);
+    for (const s of SPOTS) if (!proceduralSpots.has(s.id)) list.push(paths.landmark(s.id));
     for (const dir of new Set(Object.values(PLAYER_DIR))) for (let f = 1; f <= 4; f++) list.push(paths.player(dir, f));
     for (const m of [...BASEMENT_TYPES, 'starfall'] as const) list.push(roomGround(m));
     for (const t of BASEMENT_TYPES) list.push(paths.scenery(PUZZLES[t].prop), paths.follower(BASEMENT[t].guardianID));
@@ -122,6 +127,24 @@ export class GameScene {
       this.trail = [];
     }
     this.buddyID = id;
+  }
+
+  /** Teleport directly to an overworld tile (e.g. from the Sanctuary Heart tab). */
+  teleportToOverworldTile(col: number, row: number) {
+    const spawn = { x: col * TILE + TILE / 2, y: row * TILE + TILE / 2 };
+    if (this.map !== 'overworld') {
+      this.overworldPos = spawn;
+      this.transitionTo('overworld', spawn);
+    } else {
+      this.player = spawn;
+      this.buddyPos = { x: spawn.x - 24, y: spawn.y };
+      this.trail = [];
+      const b = biomeAt(col, row);
+      if (b) {
+        this.lastBiome = b;
+        this.hooks.onBiome(b);
+      }
+    }
   }
 
   /** Stop movement while an overlay is open, as pauseForEncounter() did. */

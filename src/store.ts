@@ -57,6 +57,40 @@ export class Chibidex {
     this.commit();
   }
 
+  friendshipCount(id: string): number {
+    return this.entry(id).friendshipCount;
+  }
+
+  unlockedStillCount(id: string): number {
+    return Math.min(6, Math.floor(this.friendshipCount(id) / 100));
+  }
+
+  progressToNextStill(id: string): { current: number; target: number; percent: number } {
+    const count = this.friendshipCount(id);
+    const unlocked = this.unlockedStillCount(id);
+    if (unlocked >= 6) return { current: 600, target: 600, percent: 1 };
+    const current = count % 100;
+    return { current, target: 100, percent: current / 100 };
+  }
+
+  giftBond(id: string, amount = 100) {
+    const e = this.entries[id] ?? blank(id);
+    e.befriended = true;
+    e.friendshipCount = Math.min(600, Math.max(1, e.friendshipCount + amount));
+    if (!e.befriendedDate) e.befriendedDate = new Date().toISOString();
+    this.entries[id] = e;
+    this.commit();
+  }
+
+  get totalFriendships(): number {
+    return ROSTER.reduce((sum, c) => sum + this.friendshipCount(c.id), 0);
+  }
+
+  totalUnlockedStills(previewAll = false): number {
+    if (previewAll) return ROSTER.length * 6;
+    return ROSTER.reduce((sum, c) => sum + this.unlockedStillCount(c.id), 0);
+  }
+
   setBuddy(id: string) {
     for (const e of Object.values(this.entries)) e.isBuddy = e.chibiID === id;
     this.commit();
