@@ -14,11 +14,11 @@
   <body>
     <div id="app">
       <section id="world" class="screen">
-        <canvas id="game" aria-label="Axis Meadows overworld"></canvas>
+        <canvas id="game" aria-label="Axis Meadows game world"></canvas>
         <div id="night" aria-hidden="true"></div>
         <div class="hud">
           <div class="hud-place">
-            <div class="hud-title">Axis Meadows</div>
+            <div id="hud-title" class="hud-title">Axis Meadows</div>
             <div id="daylight" class="hud-daylight"></div>
             <div id="biome-desc" class="hud-desc"></div>
           </div>
@@ -28,7 +28,9 @@
           </div>
         </div>
         <div id="toast" class="toast" hidden></div>
+        <div id="banner" class="toast banner" role="status" hidden></div>
         <div id="prompt" class="prompt" hidden></div>
+        <div id="visit" class="visit" hidden></div>
         <div id="keys-hint" class="keys-hint">WASD / arrows to move · Shift to run · E to investigate</div>
         <div id="touch" class="touch" hidden>
           <div id="stick" class="stick" aria-label="Movement stick">

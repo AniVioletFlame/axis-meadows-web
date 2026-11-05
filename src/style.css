@@ -260,3 +260,38 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- basements ---------- */
+.hud-desc.hint { color: rgba(100, 210, 255, 0.85); }
+.hud-desc.starfall { color: rgba(255, 214, 10, 0.85); }
+.banner { animation: drop 0.25s ease; }
+
+.visit {
+  position: absolute; left: 0; right: 0; bottom: 18px; z-index: 5; display: flex; justify-content: center;
+  padding: 0 18px; animation: rise 0.25s ease;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+.visit-card {
+  width: 100%; max-width: 540px; padding: 18px; border-radius: 22px; display: flex; flex-direction: column; gap: 12px;
+  background: rgba(38, 26, 43, 0.97); border: 1px solid rgba(255, 149, 0, 0.45); box-shadow: 0 0 36px rgba(0, 0, 0, 0.35);
+}
+.visit-top { display: flex; gap: 14px; align-items: flex-start; }
+.visit-face { position: relative; flex: none; width: 76px; height: 88px; }
+.visit-portrait { width: 76px; height: 88px; object-fit: cover; object-position: top; border-radius: 18px; background: rgba(255, 255, 255, 0.06); }
+.visit-face .initial { width: 76px; height: 76px; font-size: 32px; }
+.badge {
+  position: absolute; right: -4px; bottom: -4px; width: 32px; height: 32px; display: grid; place-items: center;
+  border-radius: 50%; background: rgba(0, 0, 0, 0.75); color: var(--accent); font-size: 18px;
+}
+.visit-text { min-width: 0; }
+.visit-text b { color: rgb(255, 217, 153); font-size: 17px; font-weight: 700; }
+.visit-text p { margin: 6px 0 0; line-height: 1.4; font-size: 15px; }
+.visit-actions { display: flex; align-items: center; gap: 8px; }
+.visit-actions .spacer { flex: 1; }
+.visit-replay {
+  border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.1); border-radius: 10px;
+  padding: 8px 12px; font-size: 14px;
+}
+.visit-next { border: 0; border-radius: 10px; padding: 9px 18px; font-size: 14px; font-weight: 700; background: var(--btn); }
+.visit-replay:hover, .visit-next:hover { filter: brightness(1.15); }
+.prompt.away { display: none; }

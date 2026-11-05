@@ -3,6 +3,7 @@
 // The renderer flips y when drawing.
 
 import type { Biome } from './data';
+import type { ActiveMap } from './basement';
 
 export const TILE = 48;
 export const COLS = 84;
@@ -141,19 +142,20 @@ export const tileCenter = (c: number, r: number) => ({ x: c * TILE + TILE / 2, y
 
 export interface Spot {
   id: string; biome: Biome; x: number; y: number; label: string;
-  portal: 'basement' | 'starfall' | null;
+  /** Where the spot leads, for portals. */
+  portal: Exclude<ActiveMap, 'overworld'> | null;
 }
 
 const SPOT_DEFS: [string, Biome, number, number, string, Spot['portal']][] = [
-  ['grove-barrel', 'whisperingGrove', 21, 7, 'Root Sanctum (B1)', 'basement'],
+  ['grove-barrel', 'whisperingGrove', 21, 7, 'Root Sanctum (B1)', 'root-sanctum'],
   ['grove-mushroom', 'whisperingGrove', 27, 17, 'Giant Mushroom', null],
-  ['crystal-shrine', 'crystalHollow', 57, 6, 'Echoing Cavern (B1)', 'basement'],
+  ['crystal-shrine', 'crystalHollow', 57, 6, 'Echoing Cavern (B1)', 'echoing-cavern'],
   ['crystal-bell', 'crystalHollow', 63, 18, 'Cracked Bell', null],
   ['crystal-star-pool', 'crystalHollow', 57, 17, 'Star Pool', null],
   ['ember-hollow-tree', 'emberglade', 45, 6, 'Hollow Tree', null],
-  ['ember-lantern', 'emberglade', 51, 17, 'Magma Forge (B1)', 'basement'],
+  ['ember-lantern', 'emberglade', 51, 17, 'Magma Forge (B1)', 'magma-forge'],
   ['shore-driftwood', 'stardustShore', 33, 6, 'Driftwood', null],
-  ['shore-tidepool', 'stardustShore', 39, 18, 'Sunken Vault (B1)', 'basement'],
+  ['shore-tidepool', 'stardustShore', 39, 18, 'Sunken Vault (B1)', 'sunken-vault'],
   ['meadow-old-well', 'wildflowerFields', 4, 11, 'Starfall Sanctum', 'starfall'],
   ['meadow-violet-archive', 'wildflowerFields', 11, 12, 'The Violet Archive', null],
 ];

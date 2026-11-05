@@ -1,9 +1,11 @@
 import './style.css';
-import { BIOME, ELEMENT, RARITY, ROSTER, befriendRate, byID, type Biome, type Chibi } from './data';
+import { BIOME, ELEMENT, RARITY, ROSTER, befriendRate, byID, type Chibi } from './data';
 import { assetURL, paths } from './assets';
-import { Chibidex } from './store';
+import { BASEMENT, BASEMENT_TYPES, BasementEngine, HOME, isBasement, isLastPage, mapName, visitLine, type HomeID } from './basement';
+import { Chibidex, safeLocalStorage } from './store';
 import { EncounterEngine } from './encounter';
-import { OverworldScene } from './scene';
+import { currentHome } from './rooms';
+import { GameScene } from './scene';
 import type { Spot } from './world';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -21,13 +23,17 @@ const iconImg = (c: Chibi, size: number) =>
 
 const dex = new Chibidex();
 const engine = new EncounterEngine(dex);
+const basement = new BasementEngine(safeLocalStorage());
+basement.onGuardianAwakened = (id) => engine.triggerDirect(id);
+const befriended = (id: string) => dex.entry(id).befriended;
 const isTouch = matchMedia('(pointer: coarse)').matches;
 const night = matchMedia('(prefers-color-scheme: dark)');
 
 let tab: 'world' | 'dex' = 'world';
 let detailOpen = false;
+let biomeDesc = BIOME.wildflowerFields.description;
 
-// ---------- overworld ----------
+// ---------- world ----------
 
 let toastTimer = 0;
 function toast(text: string) {
@@ -38,9 +44,12 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => (t.hidden = true), 2800);
 }
 
-const scene = new OverworldScene($<HTMLCanvasElement>('game'), {
+const scene = new GameScene($<HTMLCanvasElement>('game'), {
   onGrassStep: (biome) => engine.stepTaken(biome),
-  onBiome: (biome: Biome) => ($('biome-desc').textContent = BIOME[biome].description),
+  onBiome: (biome) => {
+    biomeDesc = BIOME[biome].description;
+    renderHUD();
+  },
   promptFor: (s: Spot) =>
     s.portal === 'starfall' && !dex.starfallUnlocked ? `Sealed (${dex.crestCount}/4 Crests)` :
     s.portal === 'starfall' ? 'Enter Starfall Sanctum' : s.label,
@@ -51,24 +60,39 @@ const scene = new OverworldScene($<HTMLCanvasElement>('game'), {
   },
   onSpot: (s) => {
     if (s.portal === 'starfall') {
-      toast(dex.starfallUnlocked
-        ? 'The Starfall Sanctum stirs… its doors open in a later update.'
-        : `The old well is sealed. Befriend the four guardians to gather Celestial Crests (${dex.crestCount}/4).`);
-    } else if (s.portal === 'basement') {
-      toast(`${s.label.replace(' (B1)', '')} lies below — the basements arrive in a later update.`);
+      toast(`The old well is sealed. Befriend the four guardians to gather Celestial Crests (${dex.crestCount}/4).`);
     } else if (s.id === 'meadow-violet-archive') {
       toast('The Violet Archive is still being catalogued. It opens in a later update.');
     } else {
       engine.checkHiddenSpot(s.id, s.biome);
     }
   },
-});
+  onMapChanged: () => {
+    $('toast').hidden = true;
+    renderHUD();
+    renderBanner();
+  },
+  onHomeEntered: () => basement.beginGuardianVisit(true),
+  onResident: () => basement.beginGuardianVisit(),
+}, basement, dex);
 
 function renderHUD() {
+  const map = scene.map;
+  const home = currentHome(map, befriended);
+  const outdoors = map === 'overworld';
   const isNight = night.matches;
-  $('daylight').textContent = isNight ? '☾ Moonlit night' : '☀ Daylight';
-  $('daylight').classList.toggle('is-night', isNight);
-  $('night').classList.toggle('on', isNight);
+  $('hud-title').textContent = home ? HOME[home].title : mapName(map);
+  const day = $('daylight');
+  day.hidden = !outdoors;
+  day.textContent = isNight ? '☾ Moonlit night' : '☀ Daylight';
+  day.classList.toggle('is-night', isNight);
+  // The night tint covers the outdoor world only.
+  $('night').classList.toggle('on', outdoors && isNight);
+  const desc = $('biome-desc');
+  desc.textContent = outdoors ? biomeDesc
+    : isBasement(map) ? (home ? HOME[home].hint : BASEMENT[map].puzzleHint)
+    : 'Sanctum of the Fallen Star';
+  desc.className = `hud-desc${outdoors ? '' : isBasement(map) ? ' hint' : ' starfall'}`;
   const crests = $('crests');
   crests.innerHTML = `<span>✨</span><b>${dex.crestCount}/4</b>`;
   crests.classList.toggle('unlocked', dex.starfallUnlocked);
@@ -81,6 +105,76 @@ function renderHUD() {
   scene.setBuddy(buddy ? buddy.id : null);
 }
 night.addEventListener('change', renderHUD);
+
+/** Puzzle messages stay up while you are in the room, as the original banner did. */
+function renderBanner() {
+  const b = $('banner');
+  b.hidden = !basement.message;
+  if (basement.message) b.textContent = basement.message;
+}
+
+// ---------- guardian visits ----------
+
+const HOME_COLORS: Record<HomeID, { accent: string; button: string }> = {
+  koko: { accent: '#ff375f', button: 'rgb(110,71,145)' },
+  nami: { accent: '#64d2ff', button: 'rgb(31,110,133)' },
+  akane: { accent: '#ff9f0a', button: 'rgb(161,64,33)' },
+  tsuki: { accent: '#bf5af2', button: 'rgb(97,71,156)' },
+};
+
+let visitShown = false;
+let visitOpenedAt = 0;
+function renderVisit() {
+  const v = basement.visit;
+  const el = $('visit');
+  el.hidden = !v;
+  if (!v) {
+    visitShown = false;
+    return;
+  }
+  const h = HOME[v.home];
+  const chibi = byID(BASEMENT[h.basement].guardianID)!;
+  const c = HOME_COLORS[v.home];
+  el.innerHTML = `
+    <div class="visit-card" role="dialog" aria-label="${esc(h.name)}" style="--accent:${c.accent};--btn:${c.button}">
+      <div class="visit-top">
+        <div class="visit-face">${portraitImg(chibi, 'visit-portrait')}<span class="badge">${v.isHomecoming ? '♥' : '♪'}</span></div>
+        <div class="visit-text">
+          <b>${esc(h.name)} · ${v.isHomecoming ? 'Welcome home' : 'Cozy company'}</b>
+          <p>${esc(visitLine(v))}</p>
+        </div>
+      </div>
+      <div class="visit-actions">
+        ${v.isHomecoming ? '' : `<button class="visit-replay" data-act="replay">${esc(h.replayTitle)}</button>`}
+        <span class="spacer"></span>
+        <button class="visit-next" data-act="next">${isLastPage(v) ? 'See you in a bit' : 'Next'}</button>
+      </div>
+    </div>`;
+  // Focus helps keyboard players turn the page with Space or Enter; on phones it would only draw a ring.
+  if (!isTouch) el.querySelector<HTMLButtonElement>('.visit-next')?.focus({ preventScroll: true });
+  if (!visitShown) {
+    visitShown = true;
+    visitOpenedAt = performance.now();
+    scene.reactResident();
+  }
+}
+
+$('visit').addEventListener('click', (e) => {
+  const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (act === 'next') basement.advanceGuardianVisit();
+  else if (act === 'replay') {
+    basement.advanceGuardianVisit();
+    basement.startHomeReplay();
+    scene.refreshRoom();
+  }
+});
+
+basement.onChange(() => {
+  renderHUD();
+  renderBanner();
+  renderVisit();
+  syncPause();
+});
 
 // ---------- encounter ----------
 
@@ -167,8 +261,9 @@ engine.onChange(() => {
   if (now !== wasEncountering) {
     wasEncountering = now;
     fx = { sweet: null, burst: null, busy: false };
-    if (now) scene.pause();
-    else if (tab === 'world') scene.resume();
+    syncPause();
+    // A befriended guardian moves in straight away, as refreshGuardianRoom() did.
+    if (!now) scene.refreshRoom();
   }
   renderEncounter();
   if (now) $('encounter').querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
@@ -242,20 +337,44 @@ $('dex-detail').addEventListener('click', (e) => {
   }
 });
 
+/** Guardians befriended outside their basement (Akane and Tsuki roam the wild) count their puzzle as solved. */
+let guardianKey: string | null = null;
+function reconcileGuardians() {
+  const ids = BASEMENT_TYPES.map((t) => BASEMENT[t].guardianID).filter(befriended);
+  const k = ids.join(',');
+  if (k === guardianKey) return;
+  guardianKey = k;
+  basement.reconcileBefriendedGuardians(ids);
+}
+
 dex.onChange(() => {
+  reconcileGuardians();
   renderHUD();
   renderDex();
 });
 
-// ---------- tabs ----------
+// ---------- tabs and pausing ----------
+
+let scenePaused = false;
+/** The world stands still while another tab, an encounter or a guardian visit is up. */
+function syncPause() {
+  const overlay = engine.active !== null || basement.visit !== null;
+  const paused = tab !== 'world' || overlay;
+  if (isTouch) $('touch').hidden = overlay;
+  $('keys-hint').hidden = isTouch || basement.visit !== null;
+  $('prompt').classList.toggle('away', overlay);
+  if (paused === scenePaused) return;
+  scenePaused = paused;
+  if (paused) scene.pause();
+  else scene.resume();
+}
 
 function setTab(next: 'world' | 'dex') {
   tab = next;
   $('world').hidden = next !== 'world';
   $('dex').hidden = next !== 'dex';
   for (const b of document.querySelectorAll<HTMLButtonElement>('.tabs button')) b.classList.toggle('active', b.dataset.tab === next);
-  if (next === 'world' && !engine.active) scene.resume();
-  else scene.pause();
+  syncPause();
   if (next === 'dex') renderDex();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('.tabs button')) {
@@ -266,6 +385,16 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('.tabs button')) {
 }
 
 window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  // E, Space or Enter turn the page of a guardian visit, but not the key press that opened it.
+  if (basement.visit && tab === 'world' && e.timeStamp > visitOpenedAt) {
+    const onButton = e.target instanceof HTMLElement && e.target.closest('button');
+    if (k === 'e' || ((k === ' ' || k === 'enter') && !onButton)) {
+      e.preventDefault();
+      if (!e.repeat) basement.advanceGuardianVisit();
+      return;
+    }
+  }
   if (e.key !== 'Escape') return;
   if (detailOpen) {
     detailID = null;
@@ -326,10 +455,11 @@ function setupTouch() {
 // ---------- boot ----------
 
 if (isTouch) setupTouch();
+reconcileGuardians();
 renderHUD();
 renderDex();
 scene.start();
 scene.init().then(() => $('loading').remove());
 
 // Exposed for debugging in the browser console.
-Object.assign(window, { axis: { dex, engine, scene } });
+Object.assign(window, { axis: { dex, engine, scene, basement } });

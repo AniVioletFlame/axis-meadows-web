@@ -74,6 +74,12 @@ export class EncounterEngine {
     return true;
   }
 
+  /** Direct encounter for puzzle guardians and the Starfall altar. */
+  triggerDirect(chibiID: string) {
+    const chibi = byID(chibiID);
+    if (chibi) this.begin(chibi);
+  }
+
   private begin(chibi: Chibi) {
     this.active = chibi;
     this.result = null;

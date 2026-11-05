@@ -110,7 +110,7 @@ export class Chibidex {
   }
 }
 
-function safeLocalStorage(): Storage | null {
+export function safeLocalStorage(): Storage | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage;
   } catch {
