@@ -87,7 +87,8 @@ export class OverworldScene {
     const list: string[] = ['grounds/ground-stardust-ocean.png'];
     for (const b of BIOMES) list.push(paths.ground(BIOME[b].file), paths.grass(BIOME[b].file));
     for (const s of SCENERY) list.push(paths.scenery(s.prop));
-    for (const s of SPOTS) list.push(paths.landmark(s.id));
+    // The Violet Archive is drawn from shapes and has no landmark image.
+    for (const s of SPOTS) if (s.id !== 'meadow-violet-archive') list.push(paths.landmark(s.id));
     for (const dir of new Set(Object.values(PLAYER_DIR))) for (let f = 1; f <= 4; f++) list.push(paths.player(dir, f));
     await loadAll(list);
     this.bakeWorld();
