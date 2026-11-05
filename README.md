@@ -3,6 +3,8 @@
 A browser port of [Axis Meadows](https://github.com/AniVioletFlame/axis-meadows), the chibi collection game.
 It runs on desktop browsers and on phones, with touch controls.
 
+**Play it:** https://anivioletflame.github.io/axis-meadows-web/
+
 ## What's in this version
 
 This first web version covers the core loop:
