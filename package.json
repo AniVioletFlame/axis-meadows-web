@@ -1,0 +1,18 @@
+{
+  "name": "axis-meadows-web",
+  "version": "1.0.0",
+  "description": "Axis Meadows, a chibi collection game, for the web.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
+  },
+  "private": true,
+  "type": "module"
+}

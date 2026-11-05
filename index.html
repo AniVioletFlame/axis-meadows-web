@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0a0814" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Axis Meadows</title>
+    <link rel="icon" href="assets/icon.png" />
+    <link rel="apple-touch-icon" href="assets/icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+  </head>
+  <body>
+    <div id="app">
+      <section id="world" class="screen">
+        <canvas id="game" aria-label="Axis Meadows overworld"></canvas>
+        <div id="night" aria-hidden="true"></div>
+        <div class="hud">
+          <div class="hud-place">
+            <div class="hud-title">Axis Meadows</div>
+            <div id="daylight" class="hud-daylight"></div>
+            <div id="biome-desc" class="hud-desc"></div>
+          </div>
+          <div class="hud-chips">
+            <div id="crests" class="chip" title="Celestial Crests"></div>
+            <div id="buddy-chip" class="chip" hidden></div>
+          </div>
+        </div>
+        <div id="toast" class="toast" hidden></div>
+        <div id="prompt" class="prompt" hidden></div>
+        <div id="keys-hint" class="keys-hint">WASD / arrows to move · Shift to run · E to investigate</div>
+        <div id="touch" class="touch" hidden>
+          <div id="stick" class="stick" aria-label="Movement stick">
+            <span class="chev up"></span><span class="chev down"></span>
+            <span class="chev left"></span><span class="chev right"></span>
+            <div id="knob" class="knob"></div>
+          </div>
+          <div class="buttons">
+            <button id="btn-b" class="btn-b" aria-label="Run">B<small>RUN</small></button>
+            <button id="btn-a" class="btn-a" aria-label="Action">A<small>ACTION</small></button>
+          </div>
+        </div>
+        <div id="loading" class="loading">Gathering stardust…</div>
+      </section>
+
+      <section id="dex" class="screen" hidden>
+        <div class="dex-scroll">
+          <header class="dex-head">
+            <div>
+              <h1>Chibidex</h1>
+              <div id="dex-count" class="dex-count"></div>
+            </div>
+            <div id="dex-buddy" class="dex-buddy"></div>
+          </header>
+          <div id="dex-grid" class="dex-grid"></div>
+        </div>
+        <div id="dex-detail" class="modal" hidden></div>
+      </section>
+
+      <nav class="tabs">
+        <button data-tab="world" class="active"><span>✦</span>World</button>
+        <button data-tab="dex"><span>📖</span>Chibidex</button>
+      </nav>
+
+      <div id="encounter" class="overlay" hidden></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
